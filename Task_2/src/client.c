@@ -112,6 +112,9 @@ void interact(int socketFD) {
             buffer[i] = c;
         }
 
+        // for printing output to next line
+        if (c == EOF) fprintf(stdout, "\n");
+
         // send the string to server
         if (send(socketFD, buffer, max(1, sizeof(char) * strlen(buffer)), 0) == -1) {
             fprintf(stderr, "Error: sending input %d\n", errno);
@@ -121,12 +124,17 @@ void interact(int socketFD) {
         memset(buffer, 0, MAX_STRING_LEN);
 
         // read output from server
-        if (read(socketFD, buffer, MAX_STRING_LEN) == -1) {
+        int val = read(socketFD, buffer, MAX_STRING_LEN);
+
+        if (val == -1) {
             fprintf(stderr, "Error: fetching output %d\n", errno);
         }
 
-        // for printing output to next line
-        if (c == EOF) fprintf(stdout, "\n");
+        if (val == 0) {
+            fprintf(stdout, "Server is dead\n");
+            close(socketFD);
+            exit(0);
+        }
 
         fprintf(stdout, "Output from Server: %s\n\n", buffer);
 

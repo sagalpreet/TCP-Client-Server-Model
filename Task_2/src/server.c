@@ -71,6 +71,7 @@ int main(int argc, char **argv)
 {
     NEXT_CLIENT_ID = 0;
     setbuf(stdout, NULL);
+    setbuf(SERVER_RECORDS, NULL);
     SERVER_RECORDS = fopen("server_records.txt", "a");
 
     int PORT = DEFAULT_PORT;
