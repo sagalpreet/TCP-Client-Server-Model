@@ -71,8 +71,8 @@ int main(int argc, char **argv)
 {
     NEXT_CLIENT_ID = 0;
     setbuf(stdout, NULL);
-    setbuf(SERVER_RECORDS, NULL);
     SERVER_RECORDS = fopen("server_records.txt", "a");
+    setbuf(SERVER_RECORDS, NULL);
 
     int PORT = DEFAULT_PORT;
     int MAX_CONN = DEFAULT_MAX_CONN;
