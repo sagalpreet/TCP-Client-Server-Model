@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <errno.h>
+#include <time.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -19,6 +20,9 @@
 
 // global variables
 int SOCKET_FD;
+uint NEXT_CLIENT_ID;
+pthread_mutex_t TERMINAL_LOG, FILE_LOG, ASSIGN_CLIENT_ID;
+FILE *SERVER_RECORDS;
 
 // data structures
 typedef struct _node
@@ -54,6 +58,8 @@ stack *makeStack();
 node *makeNode(float val);
 
 // helper function declarations
+void serverSetup(int PORT, int MAX_CONN, int ADDR);
+void clientConnect(int socketFD, struct sockaddr_in serverAddress, int addrlen);
 void evaluatePostfix(char *string);
 void *handleConnections(void *arg);
 token nextToken(char *string, int *index);
@@ -63,6 +69,9 @@ token nextOperator(char *string, int *index);
 // The main function
 int main(int argc, char **argv)
 {
+    NEXT_CLIENT_ID = 0;
+    setbuf(stdout, NULL);
+    SERVER_RECORDS = fopen("server_records.txt", "a");
 
     int PORT = DEFAULT_PORT;
     int MAX_CONN = DEFAULT_MAX_CONN;
@@ -79,83 +88,9 @@ int main(int argc, char **argv)
     if (argc > 3)
         ADDR = inet_addr(argv[3]);
 
-    // create a socket
-    int socketFD = SOCKET_FD = socket(AF_INET, SOCK_STREAM, 0);
+    serverSetup(PORT, MAX_CONN, ADDR);
 
-    if (socketFD == -1)
-    {
-        fprintf(stderr, "Error: Attempt to create a socket failed...\n");
-        exit(errno);
-    }
-    else
-    {
-        fprintf(stdout, "Socket Created successfully...\n");
-    }
-
-    // socket address setup
-    struct sockaddr_in serverAddress;
-    int addrlen = sizeof(serverAddress);
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_addr.s_addr = ADDR;
-    serverAddress.sin_port = htons(PORT);
-
-    // binding address to the socket
-    if (bind(socketFD, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) < 0)
-    {
-        fprintf(stderr, "Error: Failed to bind the socket\n");
-        exit(errno);
-    }
-    else
-    {
-        fprintf(stdout, "Socket Binded successfully...\n");
-    }
-
-    // convert socket to listening socket
-    if (listen(socketFD, MAX_CONN) == -1)
-    {
-        /**
-         * @note MAX_CONN is not necessarily required for
-         * our tcp server because tcp server supports
-         * retransmission. Effectively, if queue size in
-         * our case exceeds MAX_CONN, request will be declined
-         * but re-attempted in future
-         *
-         */
-        fprintf(stderr, "Error: Listen failed on the socket\n");
-        exit(errno);
-    }
-    else
-    {
-        fprintf(stdout, "Server Listening...\n\n");
-    }
-
-    while (1)
-    {
-        // allocate memory to store the file descriptor of
-        // peer socket, this will be freed inside the thread
-        int *peer_socket = (int *)malloc(sizeof(int));
-
-        fprintf(stdout, "Waiting for new connection ...\n");
-
-        // attempt to accept the connection request
-        *peer_socket = accept(socketFD, (struct sockaddr *)&serverAddress, (socklen_t *)&addrlen);
-
-        // handle case if couldn't connect
-        if ((*peer_socket) == -1)
-        {
-            fprintf(stderr, "Could't connect with the client %d\n", errno);
-
-            free(peer_socket);
-            continue;
-        }
-        fprintf(stdout, "Connection established with socket file descriptor %d\n", *peer_socket);
-
-        // connection handling on a different thread
-        pthread_t thread;
-        pthread_create(&thread, NULL, handleConnections, peer_socket);
-    }
-
-    close(socketFD);
+    fclose(SERVER_RECORDS);
 
     return 0;
 }
@@ -251,6 +186,110 @@ float top(stack *s)
 }
 
 // helper function definitions
+void serverSetup(int PORT, int MAX_CONN, int ADDR)
+{
+    // create a socket
+    int socketFD = SOCKET_FD = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (socketFD == -1)
+    {
+        pthread_mutex_lock(&TERMINAL_LOG);
+        fprintf(stderr, "Error: Attempt to create a socket failed...\n");
+        pthread_mutex_unlock(&TERMINAL_LOG);
+        exit(errno);
+    }
+    else
+    {
+        pthread_mutex_lock(&TERMINAL_LOG);
+        fprintf(stdout, "Socket Created successfully...\n");
+        pthread_mutex_unlock(&TERMINAL_LOG);
+    }
+
+    // socket address setup
+    struct sockaddr_in serverAddress;
+    int addrlen = sizeof(serverAddress);
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = ADDR;
+    serverAddress.sin_port = htons(PORT);
+
+    // binding address to the socket
+    if (bind(socketFD, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) < 0)
+    {
+        pthread_mutex_lock(&TERMINAL_LOG);
+        fprintf(stderr, "Error: Failed to bind the socket\n");
+        pthread_mutex_unlock(&TERMINAL_LOG);
+        exit(errno);
+    }
+    else
+    {
+        pthread_mutex_lock(&TERMINAL_LOG);
+        fprintf(stdout, "Socket Binded successfully...\n");
+        pthread_mutex_unlock(&TERMINAL_LOG);
+    }
+
+    // convert socket to listening socket
+    if (listen(socketFD, MAX_CONN) == -1)
+    {
+        /**
+         * @note MAX_CONN is not necessarily required for
+         * our tcp server because tcp server supports
+         * retransmission. Effectively, if queue size in
+         * our case exceeds MAX_CONN, request will be declined
+         * but re-attempted in future
+         *
+         */
+        pthread_mutex_lock(&TERMINAL_LOG);
+        fprintf(stderr, "Error: Listen failed on the socket\n");
+        pthread_mutex_unlock(&TERMINAL_LOG);
+        exit(errno);
+    }
+    else
+    {
+        pthread_mutex_lock(&TERMINAL_LOG);
+        fprintf(stdout, "Server Listening...\n\n");
+        pthread_mutex_unlock(&TERMINAL_LOG);
+    }
+
+    clientConnect(socketFD, serverAddress, addrlen);
+
+    close(socketFD);
+}
+
+void clientConnect(int socketFD, struct sockaddr_in serverAddress, int addrlen)
+{
+    while (1)
+    {
+        // allocate memory to store the file descriptor of
+        // peer socket, this will be freed inside the thread
+        int *peer_socket = (int *)malloc(sizeof(int));
+
+        pthread_mutex_lock(&TERMINAL_LOG);
+        fprintf(stdout, "Waiting for new connection ...\n");
+        pthread_mutex_unlock(&TERMINAL_LOG);
+
+        // attempt to accept the connection request
+        *peer_socket = accept(socketFD, (struct sockaddr *)&serverAddress, (socklen_t *)&addrlen);
+
+        // handle case if couldn't connect
+        if ((*peer_socket) == -1)
+        {
+            pthread_mutex_lock(&TERMINAL_LOG);
+            fprintf(stderr, "Could't connect with the client %d\n", errno);
+            pthread_mutex_unlock(&TERMINAL_LOG);
+
+            free(peer_socket);
+            continue;
+        }
+        pthread_mutex_lock(&TERMINAL_LOG);
+        fprintf(stdout, "Connection established with socket file descriptor %d\n", *peer_socket);
+        pthread_mutex_unlock(&TERMINAL_LOG);
+
+        // connection handling on a different thread
+        pthread_t thread;
+        pthread_create(&thread, NULL, handleConnections, peer_socket);
+    }
+}
+
 void evaluatePostfix(char *string)
 {
     /**
@@ -326,12 +365,14 @@ void evaluatePostfix(char *string)
                 if (b == 0)
                 {
                     strcpy(string, "DIVISION BY ZERO");
+                    while (s -> size) pop(s);
                     return;
                 }
                 a /= b;
                 break;
             default:
                 strcpy(string, "INVALID EXPRESSION");
+                while (s -> size) pop(s);
                 return;
             }
 
@@ -358,6 +399,8 @@ void evaluatePostfix(char *string)
     }
     else
         strcpy(string, "INVALID EXPRESSION");
+    
+    while (s -> size) pop(s);
 
     free(s);
 }
@@ -370,30 +413,73 @@ void *handleConnections(void *arg)
      * And the thread dies out if client stops.
      *
      */
+
+    int start_time = time(NULL);
+
+    // assigning a client id to the client
+    pthread_mutex_lock(&ASSIGN_CLIENT_ID);
+    uint id = NEXT_CLIENT_ID;
+    NEXT_CLIENT_ID++;
+    pthread_mutex_unlock(&ASSIGN_CLIENT_ID);
+
+    char id_string[1000] = {0};
+    sprintf(id_string, "%u", id);
+
     int peer_socket = *((int *)arg);
+
+    // for information exchange
     char buffer[MAX_STRING_LEN + 1] = {0};
 
-    int valread = recv(peer_socket, buffer, MAX_STRING_LEN + 1, 0);
-
-    // if error encountered while reading request
-    if (valread == -1)
+    // sending the client id to client
+    if (send(peer_socket, id_string, sizeof(char) * strlen(id_string), 0) == -1)
     {
-        fprintf(stderr, "Error: Couldn't read request from peer %d\n", peer_socket);
-        free(arg);
-
-        return NULL;
+        pthread_mutex_lock(&TERMINAL_LOG);
+        fprintf(stderr, "Error: Couldn't send client id to client %u\n", id);
+        pthread_mutex_unlock(&TERMINAL_LOG);
     }
 
-    // reverse the string in-place
-    evaluatePostfix(buffer);
-
-    // send back the result
-    if (send(peer_socket, buffer, sizeof(char) * strlen(buffer), 0) == -1)
+    while (1) // for non-pipelined persistent connection
     {
-        fprintf(stderr, "Error: Couldn't send result to peer %d\n", peer_socket);
-        free(arg);
+        // clear buffer
+        memset(buffer, 0, MAX_STRING_LEN + 1);
 
-        return NULL;
+        // read input from client
+        int valread = recv(peer_socket, buffer, MAX_STRING_LEN + 1, 0);
+
+        pthread_mutex_lock(&FILE_LOG);
+        fprintf(SERVER_RECORDS, "%d %s ", id, buffer);
+        pthread_mutex_unlock(&FILE_LOG);
+
+        // if client has shutdown
+        if (valread == 0)
+        {
+            pthread_mutex_lock(&TERMINAL_LOG);
+            fprintf(stderr, "Shutting down connection with client %u\n", id);
+            pthread_mutex_unlock(&TERMINAL_LOG);
+            
+            free(arg);
+            close(peer_socket);
+
+            return NULL;
+        }
+
+        // reverse the string in-place
+        evaluatePostfix(buffer);
+
+        pthread_mutex_lock(&FILE_LOG);
+        fprintf(SERVER_RECORDS, "%s %ld\n", buffer, time(NULL) - start_time);
+        pthread_mutex_unlock(&FILE_LOG);
+
+        // send back the result
+        if (send(peer_socket, buffer, sizeof(char) * strlen(buffer), 0) == -1)
+        {
+            pthread_mutex_lock(&TERMINAL_LOG);
+            fprintf(stderr, "Error: Couldn't send result to peer %u\n", id);
+            pthread_mutex_unlock(&TERMINAL_LOG);
+            free(arg);
+
+            return NULL;
+        }
     }
 
     free(arg);

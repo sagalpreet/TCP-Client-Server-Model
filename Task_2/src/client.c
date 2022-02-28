@@ -73,6 +73,18 @@ int main(int argc, char **argv) {
         fprintf(stdout, "Socket Binded successfully...\n\n");
     }
 
+    // client id assigned by server
+    char id[1000] = {0};
+
+    if (read(socketFD, id, MAX_STRING_LEN) == -1)
+    {
+        fprintf(stdout, "Could not read the client id\n");
+    }
+    else
+    {
+        fprintf(stdout, "Client ID: %s\n", id);
+    }
+
     interact(socketFD); // talk to server
 }
 
@@ -81,42 +93,47 @@ void interact(int socketFD) {
     char buffer[MAX_STRING_LEN + 1] = {0};
     char c;
 
-    fprintf(stdout, "Enter the string: ");
+    while (1)
+    {
+        fprintf(stdout, "Enter the string: ");
 
-    // read string from stdin
-    // \n denotes end of string
-    for (int i = 0; i <= MAX_STRING_LEN; i++) {
-        c = getchar();
+        // read string from stdin
+        // \n denotes end of string
+        for (int i = 0; i <= MAX_STRING_LEN; i++) {
+            c = getchar();
 
-        int isEnd = (c == EOF);
-        if (!SUPPORTS_MULTI_LINE) isEnd |= (c == '\n');
+            int isEnd = (c == EOF);
+            if (!SUPPORTS_MULTI_LINE) isEnd |= (c == '\n');
 
-        if (isEnd) {
-            buffer[i] = 0;
-            break;
+            if (isEnd) {
+                buffer[i] = 0;
+                break;
+            }
+            buffer[i] = c;
         }
-        buffer[i] = c;
+
+        // send the string to server
+        if (send(socketFD, buffer, max(1, sizeof(char) * strlen(buffer)), 0) == -1) {
+            fprintf(stderr, "Error: sending input %d\n", errno);
+        }
+
+        // clear buffer for reading output
+        memset(buffer, 0, MAX_STRING_LEN);
+
+        // read output from server
+        if (read(socketFD, buffer, MAX_STRING_LEN) == -1) {
+            fprintf(stderr, "Error: fetching output %d\n", errno);
+        }
+
+        // for printing output to next line
+        if (c == EOF) fprintf(stdout, "\n");
+
+        fprintf(stdout, "Output from Server: %s\n\n", buffer);
+
+        if (c == EOF) {
+            clearerr(stdin);
+        }
     }
-
-    // send the string to server
-    if (send(socketFD, buffer, max(1, sizeof(char) * strlen(buffer)), 0) == -1) {
-        fprintf(stderr, "Error: sending input %d\n", errno);
-        exit(errno);
-    }
-
-    // clear buffer for reading output
-    memset(buffer, 0, MAX_STRING_LEN);
-
-    // read output from server
-    if (read(socketFD, buffer, MAX_STRING_LEN) == -1) {
-        fprintf(stderr, "Error: fetching output %d\n", errno);
-        exit(errno);
-    }
-
-    // for printing output to next line
-    if (c == EOF) fprintf(stdout, "\n");
-
-    fprintf(stdout, "Output from Server: %s\n\n", buffer);
 
     close(socketFD);
 }
