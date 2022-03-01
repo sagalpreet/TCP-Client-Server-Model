@@ -16,6 +16,8 @@
 #define MAX_STRING_LEN 1024
 #define DEBUG 0
 
+#define max(a, b) (a > b) ? a : b
+
 // global variables
 int SOCKET_FD;
 
@@ -169,7 +171,7 @@ void* handleConnections(void *arg) {
     reverseString(buffer);
 
     // send back the result
-    if (send(peer_socket, buffer, sizeof(char)*strlen(buffer), 0) == -1) {
+    if (send(peer_socket, buffer, sizeof(char)*max(1, strlen(buffer)), 0) == -1) {
         fprintf(stderr, "Error: Couldn't send result to peer %d\n", peer_socket);
         free(arg);
 
