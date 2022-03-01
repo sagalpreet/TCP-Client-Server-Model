@@ -62,3 +62,12 @@ ADDRESS = INADDR_ANY (all available interfaces)
 - By default:
 PORT = 8080
 ADDRESS = 127.0.0.1
+
+---------------
+
+4. Important Points
+
+- TASK 2
+---- To give input from a file instead of terminal, change client to non-interactive mode by changing define INTERACTIVE 1 to 0.
+---- Ctrl+d or return denotes end of one input.
+---- Ctrl+c to kill the client or server.
