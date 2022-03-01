@@ -14,6 +14,7 @@
 #define DEFAULT_INTERFACE "127.0.0.1"
 #define DEFAULT_PORT 8080
 #define MAX_STRING_LEN 1024
+#define INTERACTIVE 1
 
 #define max(a, b) (a > b) ? a:b
 
@@ -139,7 +140,8 @@ void interact(int socketFD) {
         fprintf(stdout, "Output from Server: %s\n\n", buffer);
 
         if (c == EOF) {
-            clearerr(stdin);
+            if (INTERACTIVE) clearerr(stdin);
+            else break;
         }
     }
 

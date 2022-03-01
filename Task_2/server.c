@@ -324,7 +324,7 @@ void evaluatePostfix(char *string)
     char hasFloat = 0;
     token t;
 
-    while (index < length)
+    while (index < length) // read through entire string
     {
         t = nextToken(string, &index);
         if (t.type == 0 || t.type == 1) // number
@@ -337,21 +337,21 @@ void evaluatePostfix(char *string)
             char op = t.val[0];
             float a, b;
 
-            if (!s->size)
+            if (!s->size) // if stack emtpy
             {
                 strcpy(string, "INVALID EXPRESSION");
                 return;
             }
             b = pop(s);
 
-            if (!s->size)
+            if (!s->size) // if stack emtpy
             {
                 strcpy(string, "INVALID EXPRESSION");
                 return;
             }
             a = pop(s);
 
-            switch (op)
+            switch (op) // perform operation on basis of operator type
             {
             case '+':
                 a += b;
@@ -363,7 +363,7 @@ void evaluatePostfix(char *string)
                 a *= b;
                 break;
             case '/':
-                if (b == 0)
+                if (b == 0) // check division by 0
                 {
                     strcpy(string, "DIVISION BY ZERO");
                     while (s -> size) pop(s);
@@ -379,17 +379,17 @@ void evaluatePostfix(char *string)
 
             push(s, a);
         }
-        else
+        else // invalid type
         {
             strcpy(string, "INVALID EXPRESSION");
             return;
         }
     }
 
-    if (s->size == 1)
+    if (s->size == 1) // if valid postfix expression
     {
         float ans = top(s);
-        if (ans == (int)ans && hasFloat == 0)
+        if (ans == (int)ans && hasFloat == 0) // select output format
         {
             sprintf(string, "%d", (int)ans);
         }
@@ -401,7 +401,7 @@ void evaluatePostfix(char *string)
     else
         strcpy(string, "INVALID EXPRESSION");
     
-    while (s -> size) pop(s);
+    while (s -> size) pop(s); // empty stack
 
     free(s);
 }
@@ -426,6 +426,8 @@ void *handleConnections(void *arg)
     char id_string[1000] = {0};
     sprintf(id_string, "%u", id);
 
+    char query[MAX_STRING_LEN + 1] = {0};
+
     int peer_socket = *((int *)arg);
 
     // for information exchange
@@ -447,10 +449,6 @@ void *handleConnections(void *arg)
         // read input from client
         int valread = recv(peer_socket, buffer, MAX_STRING_LEN + 1, 0);
 
-        pthread_mutex_lock(&FILE_LOG);
-        fprintf(SERVER_RECORDS, "%d %s ", id, buffer);
-        pthread_mutex_unlock(&FILE_LOG);
-
         // if client has shutdown
         if (valread == 0)
         {
@@ -464,11 +462,15 @@ void *handleConnections(void *arg)
             return NULL;
         }
 
-        // reverse the string in-place
+        // store query
+        strcpy(query, buffer);
+
+        // evaluate post fix expression in place
         evaluatePostfix(buffer);
 
+        // log into file
         pthread_mutex_lock(&FILE_LOG);
-        fprintf(SERVER_RECORDS, "%s %ld\n", buffer, time(NULL) - start_time);
+        fprintf(SERVER_RECORDS, "%d %s %s %ld\n", id, query, buffer, time(NULL) - start_time);
         pthread_mutex_unlock(&FILE_LOG);
 
         // send back the result
