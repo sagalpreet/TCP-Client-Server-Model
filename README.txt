@@ -69,5 +69,6 @@ ADDRESS = 127.0.0.1
 
 - TASK 2
 ---- To give input from a file instead of terminal, change client to non-interactive mode by changing define INTERACTIVE 1 to 0.
+---- The maximum length allowed for the message can be changed similarly by altering the value defined.
 ---- Ctrl+d or return denotes end of one input.
 ---- Ctrl+c to kill the client or server.
